@@ -24,6 +24,7 @@ jobs:
         with:
           go-version: ${{ matrix.go_version }}
           cache: true
+      - run: go mod download
       - name: test
         run: go test -v -race -coverprofile=cover.out ./...
       - uses: actions/upload-artifact@v3.1.1

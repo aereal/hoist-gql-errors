@@ -10,11 +10,28 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+type Option func(config)
+
+// WithEventOptions returns an Option that passes given trace.EventOption to span.RecordError().
+func WithEventOptions(opts ...trace.EventOption) Option {
+	return func(c config) {
+		c.eventOptions = append(c.eventOptions, opts...)
+	}
+}
+
+type config struct {
+	eventOptions []trace.EventOption
+}
+
 // New returns the middleware function that extracts GraphQL errors from
 // downstream http.Handler.
 //
 // The extracted errors are recorded span's errors.
-func New() func(http.Handler) http.Handler {
+func New(opts ...Option) func(http.Handler) http.Handler {
+	var cfg config
+	for _, o := range opts {
+		o(cfg)
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			span := trace.SpanFromContext(r.Context())
@@ -33,7 +50,7 @@ func New() func(http.Handler) http.Handler {
 			}
 			span.SetStatus(codes.Error, resp.Errors.Error())
 			for _, err := range resp.Errors {
-				span.RecordError(err)
+				span.RecordError(err, cfg.eventOptions...)
 			}
 		})
 	}

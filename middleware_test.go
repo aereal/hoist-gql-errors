@@ -44,7 +44,7 @@ func doTest(t *testing.T, traceMiddleware func(tp *sdktrace.TracerProvider) midd
 	mw := hoistgqlgenerrors.New()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := graphql.Response{Errors: errs}
-		_ = json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp) //nolint:errchkjson
 	})
 	srv := httptest.NewServer(traceMiddleware(tp)(mw(handler)))
 	defer srv.Close()

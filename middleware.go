@@ -10,11 +10,11 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-type Option func(config)
+type Option func(*config)
 
 // WithEventOptions returns an Option that passes given trace.EventOption to span.RecordError().
 func WithEventOptions(opts ...trace.EventOption) Option {
-	return func(c config) {
+	return func(c *config) {
 		c.eventOptions = append(c.eventOptions, opts...)
 	}
 }
@@ -28,7 +28,7 @@ type config struct {
 //
 // The extracted errors are recorded span's errors.
 func New(opts ...Option) func(http.Handler) http.Handler {
-	var cfg config
+	cfg := &config{}
 	for _, o := range opts {
 		o(cfg)
 	}

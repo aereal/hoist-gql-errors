@@ -16,6 +16,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func TestMiddleware(t *testing.T) {
@@ -29,6 +30,17 @@ func TestMiddleware(t *testing.T) {
 		}
 		doTest(t, withTrace, gqlerror.List{gqlerror.Errorf("oops")}, []tracetest.SpanStub{{Name: "/", Events: []sdktrace.Event{event}}})
 	})
+	t.Run("with stacktrace", func(t *testing.T) {
+		event := sdktrace.Event{
+			Name: semconv.ExceptionEventName,
+			Attributes: []attribute.KeyValue{
+				semconv.ExceptionTypeKey.String("*gqlerror.Error"),
+				semconv.ExceptionMessageKey.String("input: oops"),
+				semconv.ExceptionStacktraceKey.String("stacktrace"),
+			},
+		}
+		doTest(t, withTrace, gqlerror.List{gqlerror.Errorf("oops")}, []tracetest.SpanStub{{Name: "/", Events: []sdktrace.Event{event}}}, hoistgqlgenerrors.WithEventOptions(trace.WithStackTrace(true)))
+	})
 	t.Run("no error returned", func(t *testing.T) {
 		doTest(t, withTrace, gqlerror.List{}, []tracetest.SpanStub{{Name: "/"}})
 	})
@@ -37,11 +49,11 @@ func TestMiddleware(t *testing.T) {
 	})
 }
 
-func doTest(t *testing.T, traceMiddleware func(tp *sdktrace.TracerProvider) middleware, errs gqlerror.List, wantSpans []tracetest.SpanStub) {
+func doTest(t *testing.T, traceMiddleware func(tp *sdktrace.TracerProvider) middleware, errs gqlerror.List, wantSpans []tracetest.SpanStub, opts ...hoistgqlgenerrors.Option) {
 	t.Helper()
 	exporter := tracetest.NewInMemoryExporter()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithBatcher(exporter))
-	mw := hoistgqlgenerrors.New()
+	mw := hoistgqlgenerrors.New(opts...)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := graphql.Response{Errors: errs}
 		_ = json.NewEncoder(w).Encode(resp) //nolint:errchkjson
@@ -69,14 +81,17 @@ func transformSpanStub(span tracetest.SpanStub) map[string]any {
 	}
 }
 
-func transformAttributeValue(value attribute.Value) any {
-	return value.AsInterface()
+func transformKeyValue(kv attribute.KeyValue) map[attribute.Key]any {
+	if kv.Key == semconv.ExceptionStacktraceKey {
+		return map[attribute.Key]any{semconv.ExceptionStacktraceKey: "stacktrace"}
+	}
+	return map[attribute.Key]any{kv.Key: kv.Value.AsInterface()}
 }
 
 func cmpSpans(want, got tracetest.SpanStubs) string {
 	opts := []cmp.Option{
 		cmp.Transformer("SpanStub", transformSpanStub),
-		cmp.Transformer("attribute.Value", transformAttributeValue),
+		cmp.Transformer("attribute.KeyValue", transformKeyValue),
 		cmpopts.IgnoreFields(sdktrace.Event{}, "Time"),
 	}
 	return cmp.Diff(want, got, opts...)

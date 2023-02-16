@@ -6,7 +6,10 @@ import (
 	"net/http"
 
 	"github.com/99designs/gqlgen/graphql"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	"go.opentelemetry.io/otel/semconv/v1.17.0/httpconv"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -19,8 +22,33 @@ func WithEventOptions(opts ...trace.EventOption) Option {
 	}
 }
 
+type EventOptionsBuilderFunc func(req *http.Request, statusCode int, responseHeader http.Header) []trace.EventOption
+
+// WithEventOptionsBuilder return an Option that uses the function to build attributes for the error events.
+func WithEventOptionsBuilder(builderFunc EventOptionsBuilderFunc) Option {
+	return func(c *config) {
+		c.builderFuncs = append(c.builderFuncs, builderFunc)
+	}
+}
+
+// WithHTTPConventionalAttributes return an Option that adds the attributes conforms to HTTP semantic conventions to the error events.
+func WithHTTPConventionalAttributes() Option {
+	return func(c *config) {
+		c.builderFuncs = append(c.builderFuncs, withHTTPConventionalAttributes)
+	}
+}
+
+func withHTTPConventionalAttributes(req *http.Request, statusCode int, responseHeader http.Header) []trace.EventOption {
+	attrs := []attribute.KeyValue{semconv.HTTPStatusCode(statusCode)}
+	attrs = append(attrs, httpconv.RequestHeader(req.Header)...)
+	attrs = append(attrs, httpconv.ResponseHeader(responseHeader)...)
+	attrs = append(attrs, httpconv.ServerRequest("", req)...)
+	return []trace.EventOption{trace.WithAttributes(attrs...)}
+}
+
 type config struct {
 	eventOptions []trace.EventOption
+	builderFuncs []EventOptionsBuilderFunc
 }
 
 // New returns the middleware function that extracts GraphQL errors from
@@ -50,7 +78,11 @@ func New(opts ...Option) func(http.Handler) http.Handler {
 			}
 			span.SetStatus(codes.Error, resp.Errors.Error())
 			for _, err := range resp.Errors {
-				span.RecordError(err, cfg.eventOptions...)
+				eventOptions := cfg.eventOptions
+				for _, builder := range cfg.builderFuncs {
+					eventOptions = append(eventOptions, builder(r, rw.statusCode, rw.Header())...)
+				}
+				span.RecordError(err, eventOptions...)
 			}
 		})
 	}
@@ -66,6 +98,7 @@ func newResponseRecorder(base http.ResponseWriter) *responseRecorder {
 type responseRecorder struct {
 	base          http.ResponseWriter
 	body          *bytes.Buffer
+	statusCode    int
 	headerWritten bool
 }
 
@@ -77,6 +110,7 @@ func (r *responseRecorder) Header() http.Header {
 
 func (r *responseRecorder) WriteHeader(statusCode int) {
 	r.headerWritten = true
+	r.statusCode = statusCode
 	r.base.WriteHeader(statusCode)
 }
 

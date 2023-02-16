@@ -15,7 +15,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
-	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -46,6 +46,30 @@ func TestMiddleware(t *testing.T) {
 	})
 	t.Run("no span started", func(t *testing.T) {
 		doTest(t, passthrough, gqlerror.List{gqlerror.Errorf("oops")}, []tracetest.SpanStub{})
+	})
+	t.Run("with event options builders", func(t *testing.T) {
+		event := sdktrace.Event{
+			Name: semconv.ExceptionEventName,
+			Attributes: []attribute.KeyValue{
+				semconv.HTTPMethod("GET"),
+				semconv.HTTPUserAgent("Go-http-client/1.1"),
+				semconv.HTTPStatusCode(200),
+				semconv.ExceptionTypeKey.String("*gqlerror.Error"),
+				semconv.ExceptionMessageKey.String("input: oops"),
+			},
+		}
+		opts := []hoistgqlgenerrors.Option{
+			hoistgqlgenerrors.WithEventOptionsBuilder(func(r *http.Request, statusCode int, _ http.Header) []trace.EventOption {
+				return []trace.EventOption{
+					trace.WithAttributes(
+						semconv.HTTPMethod(r.Method),
+						semconv.HTTPUserAgent(r.UserAgent()),
+						semconv.HTTPStatusCode(statusCode),
+					),
+				}
+			}),
+		}
+		doTest(t, withTrace, gqlerror.List{gqlerror.Errorf("oops")}, []tracetest.SpanStub{{Name: "/", Events: []sdktrace.Event{event}}}, opts...)
 	})
 }
 

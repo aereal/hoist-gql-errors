@@ -3,7 +3,7 @@ module github.com/aereal/hoist-gql-errors
 go 1.19
 
 require (
-	github.com/99designs/gqlgen v0.17.28
+	github.com/99designs/gqlgen v0.17.29
 	github.com/google/go-cmp v0.5.9
 	github.com/vektah/gqlparser/v2 v2.5.1
 	go.opentelemetry.io/otel v1.14.0

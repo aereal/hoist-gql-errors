@@ -31,7 +31,7 @@ jobs:
       - run: go mod download
       - name: test
         run: go test -v -race -coverprofile=cover.out ./...
-      - uses: actions/upload-artifact@v3.1.3
+      - uses: actions/upload-artifact@v4.6.1
         with:
           name: coverage
           path: ./cover.out
@@ -46,7 +46,7 @@ jobs:
       - test
     steps:
       - uses: actions/checkout@v3.3.0
-      - uses: actions/download-artifact@v3.0.2
+      - uses: actions/download-artifact@v4.1.9
         with:
           name: coverage
       - uses: k1LoW/octocov-action@v0.47.4

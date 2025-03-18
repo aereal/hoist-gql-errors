@@ -1,6 +1,9 @@
 [![status][ci-status-badge]][ci-status]
 [![PkgGoDev][pkg-go-dev-badge]][pkg-go-dev]
 
+> [!WARNING]
+> This module is no longer maintained, its functionality has been merged into [aereal/otelgqlgen](https://github.com/aereal/otelgqlgen), please use that instead.
+
 # hoist-gql-errors
 
 hoist-gql-errors extracts [GraphQL][] errors from the downstream response and record them as [OpenTelemetry][] exception events.
